@@ -8,14 +8,14 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import anthropic
 
-# ---------- Database Setup ----------
-DATABASE_URL = st.secrets.get("DATABASE_URL", "postgresql://postgres:password@localhost:5432/agent_db")
+# ---------- Database Setup (SQLite - No external database needed) ----------
+# Always use SQLite for Streamlit Cloud
+DATABASE_URL = "sqlite:///./agent.db"
 
-# Try to use local SQLite if PostgreSQL is not available (for local testing)
-if "localhost" in DATABASE_URL and not os.environ.get("DATABASE_URL"):
-    DATABASE_URL = "sqlite:///./agent.db"
+# Create directory for database
+os.makedirs(os.path.dirname("./agent.db") if os.path.dirname("./agent.db") else ".", exist_ok=True)
 
-engine = create_engine(DATABASE_URL)
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -153,7 +153,6 @@ def create_support_ticket(customer_id: str, issue: str, order_id: str = None) ->
         ticket_count = db.query(SupportTicket).count()
         ticket_id = f"TKT-{ticket_count + 10001}"
         
-        # Determine priority
         priority = "medium"
         issue_lower = issue.lower()
         if any(word in issue_lower for word in ["urgent", "escalate", "asap", "late", "delay", "complaint"]):
@@ -302,7 +301,7 @@ For complaints: Create support ticket with high priority."""
         tool_results = []
         response_text = ""
         
-        for _ in range(5):  # Max 5 tool calls
+        for _ in range(5):
             response = self.client.messages.create(
                 model=self.model,
                 max_tokens=4096,
@@ -436,12 +435,10 @@ else:
     query = st.chat_input("Ask me something like: 'Check order ORD-12345' or 'I want a refund for ORD-12345'")
 
 if query:
-    # Add user message
     st.session_state.messages.append({"role": "user", "content": query})
     with st.chat_message("user"):
         st.write(query)
     
-    # Process with agent
     with st.chat_message("assistant"):
         with st.spinner("🤔 Agent thinking and calling tools..."):
             agent = CustomerSupportAgent(api_key)
@@ -467,6 +464,5 @@ if query:
     
     st.rerun()
 
-# Footer
 st.markdown("---")
 st.caption("🔍 Built with **Claude 3.5 Sonnet + Tool Calling** | Autonomous Agent that takes real actions")
